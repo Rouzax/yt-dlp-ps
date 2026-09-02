@@ -211,8 +211,8 @@ keep that work on a local disk and send only the finished file over:
 
 Measure before you bother. On a fast share this saves very little, because the finished file
 still has to cross the network and `--limit-rate` makes the download itself the bottleneck:
-on a 1 Gbps link measured at 115 MB/s, a 1 GB video saved single-digit seconds out of a
-four-minute job. On a slow, busy or remote share it is worth it.
+on a share measured at 150 MB/s, a 1 GB video saved single-digit seconds out of a four-minute
+job. On a slow, busy or remote share it is worth it.
 
 The free space line names the volume you are really writing to, so it is easy to spot when a
 path like `C:\TEMP` is actually a share.
