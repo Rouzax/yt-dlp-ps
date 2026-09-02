@@ -459,12 +459,14 @@ function Test-Environment {
             $released = Get-Date -Year $Matches[1] -Month $Matches[2] -Day $Matches[3] -Hour 0 -Minute 0 -Second 0
             $age = [int]((Get-Date) - $released).TotalDays
             if ($age -gt $script:StaleAfterDays) {
-                $how = if ($ExePath -like '*WinGet*' -or $ExePath -like "$env:ProgramFiles*") {
-                    'winget upgrade yt-dlp.yt-dlp'
-                } else {
-                    "$ExePath -U   (or re-run this script with -Update)"
+                # Self-update is the reliable route: a package manager's tracked version
+                # can lag well behind a binary that has already updated itself in place,
+                # so upgrading through it can even move you backwards.
+                $how = 'run this script once with -Update'
+                if ($ExePath -like '*WinGet*') {
+                    $how += ' (prefer that over winget upgrade, which can lag behind a self-updated binary)'
                 }
-                Write-RunLog -Level WARN -EventName 'ytdlp_stale' -Data @{ version = $version; age_days = $age } -Message ('yt-dlp is {0} days old. YouTube changes often, update with: {1}' -f $age, $how)
+                Write-RunLog -Level WARN -EventName 'ytdlp_stale' -Data @{ version = $version; age_days = $age } -Message ('yt-dlp is {0} days old. YouTube changes often, {1}.' -f $age, $how)
             }
         }
     } catch {
@@ -500,7 +502,7 @@ function Update-YtDlp {
         & $ExePath '-U'
         Write-RunLog -Level INFO -EventName 'ytdlp_update' -Data @{ exit_code = $LASTEXITCODE } -NoConsole
         if ($LASTEXITCODE -ne 0) {
-            Write-RunLog -Level WARN -EventName 'ytdlp_update_failed' -Message 'Self-update failed. If yt-dlp lives in Program Files, update it with: winget upgrade yt-dlp.yt-dlp'
+            Write-RunLog -Level WARN -EventName 'ytdlp_update_failed' -Message 'Self-update failed. If the binary is not writable, re-run from an elevated prompt, or reinstall it with your package manager.'
         }
     } catch {
         Write-RunLog -Level WARN -EventName 'ytdlp_update_failed' -Message $_.Exception.Message
