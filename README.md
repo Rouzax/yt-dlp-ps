@@ -223,7 +223,7 @@ one link failed, `130` when you pressed Ctrl+C.
 | Symptom | What to do |
 | --- | --- |
 | "Sign in to confirm you're not a bot" | `-CookiesFromBrowser edge`, with that browser fully closed (it locks its cookie database) |
-| Formats missing, signature or `nsig` errors | yt-dlp is too old: `winget upgrade yt-dlp.yt-dlp` |
+| Formats missing, signature or `nsig` errors | yt-dlp is too old: re-run once with `-Update` |
 | `HTTP Error 429` | raise `-SleepInterval` / `-MaxSleepInterval`, lower `-ConcurrentFragments`, wait |
 | Nothing happens, "already been recorded" | it is in the archive; use `-NoArchive` to force |
 | Path or file name too long | shorter `-OutputPath`, or `-TrimFilenames 120` |
@@ -278,6 +278,24 @@ needs a deliberate decision and its own commit.
 
 Coverage is deliberately not chased to 100%: `Invoke-Main` and the interactive prompt would
 need heavy mocking for little value. Everything else is held by the tests.
+
+## Keeping yt-dlp current
+
+This script does **not** update `yt-dlp` on every run. YouTube changes often, so an old
+binary is the usual cause of "formats have been skipped", `nsig` errors and sudden
+failures. The script warns once the binary is more than 45 days old.
+
+```powershell
+.\Invoke-YtDlp.ps1 -Update M-CdImxl9XI   # yt-dlp -U first, then download
+```
+
+Prefer `-Update` over a package manager upgrade. `yt-dlp -U` replaces the binary in place,
+which your package manager does not see, so its tracked version can drift well behind what
+is actually installed and "upgrading" can move you backwards.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
 
 ## Credits
 
