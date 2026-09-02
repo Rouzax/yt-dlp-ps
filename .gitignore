@@ -1,0 +1,29 @@
+# Local-only working files, never committed
+CLAUDE.md
+.claude/
+docs/superpowers/
+*.plan.md
+*.design.md
+
+# Test and coverage output
+.coverage.xml
+coverage*.xml
+TestResults*.xml
+
+# Logs
+*.log
+
+# Cookie exports are live credentials for your YouTube session: never commit them
+cookies.txt
+*.cookies
+cookies*.txt
+
+# Windows
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# Editors
+.vscode/
+.idea/
+*.swp

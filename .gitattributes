@@ -1,0 +1,13 @@
+# Windows-only PowerShell repo: keep scripts CRLF in the working tree so the
+# checked-out files match what Windows tooling expects.
+* text=auto
+
+*.ps1  text eol=crlf
+*.psm1 text eol=crlf
+*.psd1 text eol=crlf
+
+*.yaml text eol=lf
+*.yml  text eol=lf
+*.md   text eol=lf
+
+*.lnk  binary
