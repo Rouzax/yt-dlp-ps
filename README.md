@@ -181,7 +181,7 @@ without downloading anything.
 | `-MergeFormat` | `mkv` | `mkv`, `mp4` or `webm` |
 | `-NoSponsorBlock` | off | skip the SponsorBlock lookup |
 | `-NoForceIPv4` | off | allow IPv6 |
-| `-Update` | off | run `yt-dlp -U` first |
+| `-NoUpdate` | off | skip the `yt-dlp -U` that runs before every download |
 | `-YtDlpPath` `-FfmpegLocation` | found on PATH | point at specific binaries |
 | `-LogPath` | `%LOCALAPPDATA%\yt-dlp-ps\logs` | where the log goes |
 | `-ExtraArgs` | | anything else, passed straight to yt-dlp |
@@ -223,7 +223,7 @@ one link failed, `130` when you pressed Ctrl+C.
 | Symptom | What to do |
 | --- | --- |
 | "Sign in to confirm you're not a bot" | `-CookiesFromBrowser edge`, with that browser fully closed (it locks its cookie database) |
-| Formats missing, signature or `nsig` errors | yt-dlp is too old: re-run once with `-Update` |
+| Formats missing, signature or `nsig` errors | yt-dlp is too old: run without `-NoUpdate` so it can update itself |
 | `HTTP Error 429` | raise `-SleepInterval` / `-MaxSleepInterval`, lower `-ConcurrentFragments`, wait |
 | Nothing happens, "already been recorded" | it is in the archive; use `-NoArchive` to force |
 | Path or file name too long | shorter `-OutputPath`, or `-TrimFilenames 120` |
@@ -273,25 +273,26 @@ needs a deliberate decision and its own commit.
 | Gate | Current | Target |
 | --- | --- | --- |
 | PSScriptAnalyzer | 0 Error, 0 Warning (`PSAvoidUsingWriteHost` excluded by design) | keep at 0 |
-| Pester | 67 tests, all green | grows with each behaviour change |
-| Statement coverage of `Invoke-YtDlp.ps1` | 40% | raise the floor whenever a change earns it |
+| Pester | 71 tests, all green | grows with each behaviour change |
+| Statement coverage of `Invoke-YtDlp.ps1` | 43% | raise the floor whenever a change earns it |
 
 Coverage is deliberately not chased to 100%: `Invoke-Main` and the interactive prompt would
 need heavy mocking for little value. Everything else is held by the tests.
 
 ## Keeping yt-dlp current
 
-This script does **not** update `yt-dlp` on every run. YouTube changes often, so an old
+`yt-dlp -U` runs before every download, by default. YouTube changes often and a stale
 binary is the usual cause of "formats have been skipped", `nsig` errors and sudden
-failures. The script warns once the binary is more than 45 days old.
+failures, so the couple of seconds it costs is worth it. If the binary is somehow still
+more than 45 days old, the script says so.
 
 ```powershell
-.\Invoke-YtDlp.ps1 -Update M-CdImxl9XI   # yt-dlp -U first, then download
+.\Invoke-YtDlp.ps1 -NoUpdate M-CdImxl9XI   # skip it: offline, in a hurry, or pinning a version
 ```
 
-Prefer `-Update` over a package manager upgrade. `yt-dlp -U` replaces the binary in place,
-which your package manager does not see, so its tracked version can drift well behind what
-is actually installed and "upgrading" can move you backwards.
+Prefer this self update over a package manager upgrade. `yt-dlp -U` replaces the binary in
+place, which your package manager does not see, so its tracked version can drift well
+behind what is actually installed and "upgrading" can move you backwards.
 
 ## License
 

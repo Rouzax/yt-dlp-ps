@@ -401,6 +401,45 @@ Describe 'Invoke-YtDlpProcess' {
     }
 }
 
+Describe 'Update-YtDlp' {
+    BeforeAll {
+        # A stand-in that behaves like `yt-dlp -U`: ignores the argument, prints, exits 0.
+        $script:fakeUpdater = Join-Path $TestDrive 'fake-update.cmd'
+        Set-Content -LiteralPath $script:fakeUpdater -Value @(
+            '@echo off'
+            'echo yt-dlp is up to date (stable@2026.08.19)'
+            'exit /b 0'
+        )
+
+        $script:failingUpdater = Join-Path $TestDrive 'failing-update.cmd'
+        Set-Content -LiteralPath $script:failingUpdater -Value @(
+            '@echo off'
+            'echo ERROR: unable to write to the binary'
+            'exit /b 1'
+        )
+    }
+
+    It 'runs the updater and leaves nothing on the pipeline' {
+        # A stray pipeline value here would end up as the process exit code.
+        $leaked = Update-YtDlp -ExePath $script:fakeUpdater 6>$null
+        $leaked | Should -BeNullOrEmpty
+    }
+
+    It 'does not throw when the updater fails' {
+        { Update-YtDlp -ExePath $script:failingUpdater 6>$null } | Should -Not -Throw
+    }
+
+    It 'leaves nothing on the pipeline when the updater fails either' {
+        $leaked = Update-YtDlp -ExePath $script:failingUpdater 6>$null
+        $leaked | Should -BeNullOrEmpty
+    }
+
+    It 'does nothing under -WhatIf' {
+        $leaked = Update-YtDlp -ExePath $script:fakeUpdater -WhatIf 6>$null
+        $leaked | Should -BeNullOrEmpty
+    }
+}
+
 Describe 'Get-FailureHint' {
     It 'suggests cookies for a bot check' {
         Get-FailureHint -Output @('ERROR: Sign in to confirm you are not a bot') |

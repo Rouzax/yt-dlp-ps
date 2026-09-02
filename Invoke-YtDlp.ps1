@@ -30,6 +30,11 @@
 .PARAMETER InputFile
     Text file with one URL / ID per line (# starts a comment).
 
+.PARAMETER NoUpdate
+    Skip the yt-dlp self update that runs before every download. YouTube changes often
+    and a stale binary is the usual cause of sudden failures, so this is on by default.
+    Use it when you are offline, in a hurry, or pinning a known good version.
+
 .EXAMPLE
     .\Invoke-YtDlp.ps1 https://www.youtube.com/watch?v=alpAGBQBIFs
 
@@ -123,7 +128,7 @@ param(
 
     [string] $LogPath,
 
-    [switch] $Update,
+    [switch] $NoUpdate,
 
     [switch] $KeepOpen,
 
@@ -462,7 +467,7 @@ function Test-Environment {
                 # Self-update is the reliable route: a package manager's tracked version
                 # can lag well behind a binary that has already updated itself in place,
                 # so upgrading through it can even move you backwards.
-                $how = 'run this script once with -Update'
+                $how = 'run without -NoUpdate so it can update itself'
                 if ($ExePath -like '*WinGet*') {
                     $how += ' (prefer that over winget upgrade, which can lag behind a self-updated binary)'
                 }
@@ -499,7 +504,14 @@ function Update-YtDlp {
 
     Write-Section 'Updating yt-dlp'
     try {
-        & $ExePath '-U'
+        # Consume the output here: anything left on the pipeline would be swallowed by
+        # Invoke-Main's return value instead of being shown.
+        $ErrorActionPreference = 'Continue'
+        $PSNativeCommandUseErrorActionPreference = $false
+        & $ExePath '-U' 2>&1 | ForEach-Object {
+            $text = if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { [string]$_ }
+            if (-not [string]::IsNullOrWhiteSpace($text)) { Write-Host ('  {0}' -f $text.TrimEnd()) -ForegroundColor DarkGray }
+        }
         Write-RunLog -Level INFO -EventName 'ytdlp_update' -Data @{ exit_code = $LASTEXITCODE } -NoConsole
         if ($LASTEXITCODE -ne 0) {
             Write-RunLog -Level WARN -EventName 'ytdlp_update_failed' -Message 'Self-update failed. If the binary is not writable, re-run from an elevated prompt, or reinstall it with your package manager.'
@@ -747,8 +759,9 @@ function Invoke-Main {
     Write-Host ('  archive   : {0}' -f $(if ($NoArchive) { 'disabled (-NoArchive)' } else { $resolvedArchive })) -ForegroundColor DarkGray
     if ($script:LogFile) { Write-Host ('  log       : {0}' -f $script:LogFile) -ForegroundColor DarkGray }
 
+    # Update first, so the version reported below is the one that will run.
+    if (-not $NoUpdate) { Update-YtDlp -ExePath $exePath }
     Test-Environment -ExePath $exePath -DownloadPath $resolvedOutput -Ffmpeg $FfmpegLocation
-    if ($Update) { Update-YtDlp -ExePath $exePath }
 
     # --- collect targets --------------------------------------------------
     $rawTargets = New-Object System.Collections.Generic.List[string]
@@ -934,7 +947,9 @@ function Invoke-Main {
 if ($MyInvocation.InvocationName -ne '.') {
     $exitCode = 1
     try {
-        $exitCode = Invoke-Main
+        # Take the last value only: a stray line on the pipeline must never become the
+        # process exit code.
+        $exitCode = [int](@(Invoke-Main) | Select-Object -Last 1)
     } catch {
         Write-Host ''
         Write-Host ('  FATAL: {0}' -f $_.Exception.Message) -ForegroundColor Red
