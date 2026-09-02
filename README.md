@@ -33,7 +33,8 @@ Because a bare command line has no answer for the things that actually go wrong:
 - **Bare IDs.** Paste `M-CdImxl9XI` instead of a full URL. Playlist IDs, channel IDs and
   `@handles` work too, and an ID that starts with `-` no longer confuses PowerShell.
 - **Preflight.** Checks that `yt-dlp` and `ffmpeg` exist, warns when `yt-dlp` is old (the
-  usual cause of "formats have been skipped"), checks free disk space, creates folders.
+  usual cause of "formats have been skipped"), creates folders, and reports free space
+  where the files actually land, following directory symlinks onto network shares.
 - **One process per link.** A dead video in a batch cannot kill the rest.
 - **Retry and classification.** Transient failures retry, permanent ones (removed, private,
   geo-blocked, bad option) do not, and every link is reported in a summary table.
@@ -197,6 +198,19 @@ without downloading anything.
     -OutputTemplate '%(playlist_title|)s/%(playlist_index&{} - |)s%(title)s [%(id)s].%(ext)s'
 ```
 
+### Recipe: downloading to a network share
+
+If `-OutputPath` is on an SMB share (including a local folder that is really a directory
+symlink to one), merging and thumbnail embedding rewrite the whole file across the network.
+Keep the intermediate files on a local disk and only send the finished file over:
+
+```powershell
+.\Invoke-YtDlp.ps1 M-CdImxl9XI -ExtraArgs '--paths', 'temp:C:\yt-dlp-work'
+```
+
+The free space line tells you which volume you are really writing to, so it is easy to spot
+when a path like `C:\TEMP` is actually a share.
+
 ### Recipe: cap the quality
 
 ```powershell
@@ -273,8 +287,8 @@ needs a deliberate decision and its own commit.
 | Gate | Current | Target |
 | --- | --- | --- |
 | PSScriptAnalyzer | 0 Error, 0 Warning (`PSAvoidUsingWriteHost` excluded by design) | keep at 0 |
-| Pester | 71 tests, all green | grows with each behaviour change |
-| Statement coverage of `Invoke-YtDlp.ps1` | 43% | raise the floor whenever a change earns it |
+| Pester | 80 tests, all green | grows with each behaviour change |
+| Statement coverage of `Invoke-YtDlp.ps1` | 46% | raise the floor whenever a change earns it |
 
 Coverage is deliberately not chased to 100%: `Invoke-Main` and the interactive prompt would
 need heavy mocking for little value. Everything else is held by the tests.

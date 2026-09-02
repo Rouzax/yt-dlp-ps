@@ -401,6 +401,74 @@ Describe 'Invoke-YtDlpProcess' {
     }
 }
 
+Describe 'Get-ExistingAncestor' {
+    It 'returns the path itself when it exists' {
+        Get-ExistingAncestor -Path $TestDrive | Should -Be $TestDrive
+    }
+
+    It 'walks up to the deepest existing folder' {
+        Get-ExistingAncestor -Path (Join-Path $TestDrive 'no\such\folder\yet') | Should -Be $TestDrive
+    }
+
+    It 'returns an empty string when nothing in the path exists' {
+        Get-ExistingAncestor -Path 'Q:\nothing\here' | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'Get-FreeSpaceInfo' {
+    It 'reports free and total bytes for an existing folder' {
+        $space = Get-FreeSpaceInfo -Path $TestDrive
+        $space | Should -Not -BeNullOrEmpty
+        $space.FreeBytes | Should -BeGreaterThan 0
+        $space.TotalBytes | Should -BeGreaterThan $space.FreeBytes
+        $space.Location | Should -Not -BeNullOrEmpty
+    }
+
+    It 'still reports for a folder that does not exist yet' {
+        # The output folder is checked before it is created.
+        $space = Get-FreeSpaceInfo -Path (Join-Path $TestDrive 'not\created\yet')
+        $space | Should -Not -BeNullOrEmpty
+        $space.FreeBytes | Should -BeGreaterThan 0
+    }
+
+    It 'returns nothing for a drive that does not exist' {
+        Get-FreeSpaceInfo -Path 'Q:\nothing\here' | Should -BeNullOrEmpty
+    }
+
+    It 'does not flag a local folder as a network share' {
+        (Get-FreeSpaceInfo -Path $TestDrive).IsNetwork | Should -BeFalse
+    }
+}
+
+Describe 'Resolve-StorageLocation' {
+    It 'returns the path itself when no ancestor is a link' {
+        Resolve-StorageLocation -Path $TestDrive | Should -Be $TestDrive
+    }
+
+    It 'rebases a path whose ancestor is a directory symlink' {
+        $realFolder = Join-Path $TestDrive 'real-target'
+        $linkFolder = Join-Path $TestDrive 'linked'
+        $null = New-Item -ItemType Directory -Path $realFolder -Force
+
+        try {
+            $null = New-Item -ItemType SymbolicLink -Path $linkFolder -Target $realFolder -ErrorAction Stop
+        } catch {
+            Set-ItResult -Skipped -Because 'creating a symlink needs elevation or developer mode'
+            return
+        }
+
+        $null = New-Item -ItemType Directory -Path (Join-Path $realFolder 'sub') -Force
+
+        # A folder reached through the link reports the real target, not the link path.
+        Resolve-StorageLocation -Path (Join-Path $linkFolder 'sub') |
+            Should -Be (Join-Path $realFolder 'sub')
+
+        # One that does not exist yet resolves as far as the link itself.
+        Resolve-StorageLocation -Path (Join-Path $linkFolder 'not-created-yet') |
+            Should -Be $realFolder
+    }
+}
+
 Describe 'Update-YtDlp' {
     BeforeAll {
         # A stand-in that behaves like `yt-dlp -U`: ignores the argument, prints, exits 0.

@@ -433,6 +433,118 @@ function Resolve-YtDlpExecutable {
     throw 'yt-dlp was not found on PATH. Install it (winget install yt-dlp.yt-dlp) or pass -YtDlpPath.'
 }
 
+function Initialize-DiskApi {
+    <#
+    .SYNOPSIS
+        Loads GetDiskFreeSpaceEx. Returns $false when that is not possible.
+
+    .DESCRIPTION
+        .NET's DriveInfo only understands local drive letters. The Win32 call resolves
+        directory symlinks and junctions itself and works on UNC paths, which is what a
+        download folder that is really an SMB share needs.
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param()
+
+    if ('YtDlpPs.Disk' -as [type]) { return $true }
+
+    try {
+        Add-Type -Namespace 'YtDlpPs' -Name 'Disk' -ErrorAction Stop -MemberDefinition @'
+[System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
+[return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+public static extern bool GetDiskFreeSpaceEx(string lpDirectoryName, out ulong lpFreeBytesAvailable, out ulong lpTotalNumberOfBytes, out ulong lpTotalNumberOfFreeBytes);
+'@
+        return $true
+    } catch {
+        return $false
+    }
+}
+
+function Get-ExistingAncestor {
+    <#
+    .SYNOPSIS
+        The deepest part of a path that exists, or an empty string.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory)][string] $Path)
+
+    $current = $Path
+    while ($current -and -not (Test-Path -LiteralPath $current)) {
+        $parent = Split-Path -Path $current -Parent
+        if (-not $parent -or $parent -eq $current) { return '' }
+        $current = $parent
+    }
+    return [string]$current
+}
+
+function Resolve-StorageLocation {
+    <#
+    .SYNOPSIS
+        Where a path's bytes really land, with directory symlinks resolved.
+
+    .DESCRIPTION
+        C:\TEMP can be a symlink to \\SERVER\SHARE, in which case reporting "C:\" is
+        actively misleading. Walks up to the nearest linked ancestor and rebases.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory)][string] $Path)
+
+    $existing = Get-ExistingAncestor -Path $Path
+    if (-not $existing) { return $Path }
+
+    $suffix = ''
+    $probe = $existing
+    for ($hop = 0; $hop -lt 32 -and $probe; $hop++) {
+        $item = Get-Item -LiteralPath $probe -Force -ErrorAction SilentlyContinue
+        if ($item -and -not [string]::IsNullOrEmpty($item.LinkTarget)) {
+            $target = $item.LinkTarget
+            if ($target -notmatch '^(\\\\|[A-Za-z]:)') {
+                $target = Join-Path (Split-Path -Path $probe -Parent) $target
+            }
+            return ($target.TrimEnd('\') + $suffix)
+        }
+
+        $parent = Split-Path -Path $probe -Parent
+        if (-not $parent -or $parent -eq $probe) { break }
+        $suffix = '\' + (Split-Path -Path $probe -Leaf) + $suffix
+        $probe = $parent
+    }
+
+    return $existing
+}
+
+function Get-FreeSpaceInfo {
+    <#
+    .SYNOPSIS
+        Free and total bytes for the volume a path lives on, or $null when unknown.
+    #>
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param([Parameter(Mandatory)][string] $Path)
+
+    $probe = Get-ExistingAncestor -Path $Path
+    if (-not $probe) { return $null }
+    if (-not (Initialize-DiskApi)) { return $null }
+
+    $free = [uint64]0
+    $total = [uint64]0
+    $totalFree = [uint64]0
+    if (-not [YtDlpPs.Disk]::GetDiskFreeSpaceEx($probe, [ref]$free, [ref]$total, [ref]$totalFree)) {
+        return $null
+    }
+
+    $location = Resolve-StorageLocation -Path $Path
+    return [pscustomobject]@{
+        Location   = $location
+        FreeBytes  = [long]$free
+        TotalBytes = [long]$total
+        IsNetwork  = $location.StartsWith('\\')
+    }
+}
+
 function Test-Environment {
     <#
     .SYNOPSIS
@@ -478,18 +590,21 @@ function Test-Environment {
         Write-RunLog -Level WARN -EventName 'ytdlp_version_failed' -Message "Could not read the yt-dlp version: $($_.Exception.Message)"
     }
 
-    # Free space on the target drive.
+    # Free space where the files actually land, which is not necessarily the drive
+    # letter in the path: C:\TEMP can be a symlink to an SMB share.
     try {
-        $root = [System.IO.Path]::GetPathRoot($DownloadPath)
-        if ($root -and $root -match '^[A-Za-z]:') {
-            $drive = Get-PSDrive -Name $root.Substring(0, 1) -ErrorAction SilentlyContinue
-            if ($drive -and $null -ne $drive.Free) {
-                $freeGb = [Math]::Round($drive.Free / 1GB, 1)
-                Write-Host ('  free space: {0} GB on {1}' -f $freeGb, $root) -ForegroundColor DarkGray
-                if ($drive.Free -lt 5GB) {
-                    Write-RunLog -Level WARN -EventName 'low_disk_space' -Data @{ free_gb = $freeGb; drive = $root } -Message ('Only {0} GB free on {1}.' -f $freeGb, $root)
-                }
+        $space = Get-FreeSpaceInfo -Path $DownloadPath
+        if ($space) {
+            $freeGb = [Math]::Round($space.FreeBytes / 1GB, 1)
+            $totalGb = [Math]::Round($space.TotalBytes / 1GB, 1)
+            $kind = if ($space.IsNetwork) { ' (network share)' } else { '' }
+            Write-Host ('  free space: {0} GB of {1} GB on {2}{3}' -f $freeGb, $totalGb, $space.Location, $kind) -ForegroundColor DarkGray
+
+            if ($space.FreeBytes -lt 5GB) {
+                Write-RunLog -Level WARN -EventName 'low_disk_space' -Data @{ free_gb = $freeGb; location = $space.Location } -Message ('Only {0} GB free on {1}.' -f $freeGb, $space.Location)
             }
+        } else {
+            Write-RunLog -Level DEBUG -EventName 'disk_check_skipped' -Message "Could not read free space for $DownloadPath."
         }
     } catch {
         Write-RunLog -Level DEBUG -EventName 'disk_check_failed' -Message $_.Exception.Message

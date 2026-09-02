@@ -26,11 +26,12 @@
 
 [CmdletBinding()]
 param(
-    # Current floor, measured 2026-09-02: 43.71% of 636 commands. Covered: input
-    # parsing, argument building, the process runner, the self updater, outcome
-    # classification, hints and logging. Not covered: Invoke-Main and the prompt.
+    # Current floor, measured 2026-09-02: 46.6% of 691 commands. Covered: input
+    # parsing, argument building, the process runner, the self updater, disk space
+    # and link resolution, outcome classification, hints and logging.
+    # Not covered: Invoke-Main and the interactive prompt.
     [ValidateRange(0, 100)]
-    [double] $CoverageFloor = 43,
+    [double] $CoverageFloor = 46,
 
     [switch] $NoCoverage
 )

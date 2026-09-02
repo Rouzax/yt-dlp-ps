@@ -5,7 +5,7 @@
 #   * PSScriptAnalyzer: zero Error and zero Warning findings, gated at commit
 #     on the changed files only, so day-to-day commits stay fast.
 #   * Pester: the full suite green, gated at push.
-#   * Coverage: 43% statement coverage of Invoke-YtDlp.ps1, the -CoverageFloor
+#   * Coverage: 46% statement coverage of Invoke-YtDlp.ps1, the -CoverageFloor
 #     default in tools/Invoke-Tests.ps1. When a change pushes coverage above the
 #     floor, raise the floor in the same change to lock the gain in.
 #
