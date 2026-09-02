@@ -201,15 +201,21 @@ without downloading anything.
 ### Recipe: downloading to a network share
 
 If `-OutputPath` is on an SMB share (including a local folder that is really a directory
-symlink to one), merging and thumbnail embedding rewrite the whole file across the network.
-Keep the intermediate files on a local disk and only send the finished file over:
+symlink to one), a finished video crosses the network about three times: the fragments are
+written, the merge rewrites the file, and embedding the thumbnail rewrites it again. You can
+keep that work on a local disk and send only the finished file over:
 
 ```powershell
 .\Invoke-YtDlp.ps1 M-CdImxl9XI -ExtraArgs '--paths', 'temp:C:\yt-dlp-work'
 ```
 
-The free space line tells you which volume you are really writing to, so it is easy to spot
-when a path like `C:\TEMP` is actually a share.
+Measure before you bother. On a fast share this saves very little, because the finished file
+still has to cross the network and `--limit-rate` makes the download itself the bottleneck:
+on a 1 Gbps link measured at 115 MB/s, a 1 GB video saved single-digit seconds out of a
+four-minute job. On a slow, busy or remote share it is worth it.
+
+The free space line names the volume you are really writing to, so it is easy to spot when a
+path like `C:\TEMP` is actually a share.
 
 ### Recipe: cap the quality
 
